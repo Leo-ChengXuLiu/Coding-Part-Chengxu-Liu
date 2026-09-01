@@ -1,44 +1,57 @@
 # Hybrid Role-Complete BDT
 
-This repository contains the two-stage XGBoost training core used in the 10 TeV `tc` analysis. Event datasets, trained model weights, and cluster-specific scripts are not included.
+Minimal reference implementation of a two-stage, leakage-safe BDT architecture.
+It contains no event selection, physics weights, significance formula, coupling
+normalization, plotting, detector configuration, or cluster-specific code.
 
 ## Architecture
 
-1. Stage 1 trains three role-specific taggers: `HJ -> b`, `LJ -> c`, and `LJ -> b`. Training-event predictions are produced with strict five-fold out-of-fold evaluation.
-2. Stage 2 combines reconstructed event observables, detector-level HJ/LJ features, and six out-of-fold role-score features in the Hybrid Role-Complete classifier.
-3. The validation split selects the score threshold, while the test split is used only for the final AUC and S/B/Z evaluation. Truth flavor is used only as Stage-1 supervision.
+1. Three role-specific Stage-1 taggers are trained:
+   `HJ -> b`, `LJ -> c`, and `LJ -> b`.
+2. Training-event Stage-1 scores are strictly out-of-fold (OOF). Validation and
+   test scores are averages over the fold models trained only on the training split.
+3. The Stage-2 event BDT receives:
+   - user-selected event features;
+   - user-selected HJ and LJ features;
+   - the three Stage-1 probabilities;
+   - three deterministic role-score combinations.
+4. Truth flavor is used only to supervise Stage 1 and is rejected from every
+   model feature list.
 
-## Input layout
+## Expected tables
+
+`events` contains one row per event:
 
 ```text
-FEATURE_ROOT/
-  PROCESS/
-    shard_0000/
-      events.parquet
-      jets.parquet
-      feature_manifest.json
+event_id | label | split | <event features...>
 ```
 
-The ordered feature contract and forbidden model inputs are defined in `configs/BDT_FEATURES_DETECTOR.yaml`. Every event must have a unique `event_id` and one `HJ` plus one `LJ` row in the jet table.
+`jets` contains exactly one `HJ` and one `LJ` row per event:
 
-## Installation and training
-
-```bash
-python -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-
-python train_hybrid_role_complete.py \
-  --feature-root /path/to/features \
-  --output outputs/run_001 \
-  --models hybrid_role_complete \
-  --device cpu \
-  --n-jobs 8 \
-  --mjj-min-gev 7000
+```text
+event_id | role | truth_flavor | <jet features...>
 ```
 
-For CUDA training, replace `--device cpu` with `--device cuda`. Main outputs include trained models, `summary.json`, `model_comparison.csv`, and event scores with their frozen split assignments.
+`split` must be one of `train`, `validation`, or `test`. The caller controls the
+split and therefore remains responsible for defining an appropriate independent test set.
 
-## Detector caveat
+## Usage
 
-The Detector V2 impact-parameter features form a parameterized tracking-sensitivity benchmark rather than a validated muon-collider detector-performance claim. Published results should therefore include the no-tracking/IP ablation.
+```python
+from src.hybrid_role_complete import HybridRoleCompleteBDT
+
+model = HybridRoleCompleteBDT(
+    event_features=["visible_energy", "missing_pt", "thrust"],
+    jet_features=["mass", "pt", "tau1", "tau2", "track_count"],
+    n_folds=5,
+    device="cpu",
+)
+
+model.fit(events, jets)
+print(model.metrics_)          # validation/test ROC AUC
+test_scores = model.test_scores_
+new_scores = model.predict_proba(new_events, new_jets)
+```
+
+The implementation intentionally leaves feature definitions, event selection,
+sample weighting, and physics interpretation to the analysis using the model.
