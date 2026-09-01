@@ -5,6 +5,7 @@ from .sparse_multitask_gnn import (
     SparseMultiTaskGNN,
     multitask_loss,
 )
+from .reconstruction import DecodeConfig, DecodedEvent, decode_event
 
 __all__ = [
     "GraphBatch",
@@ -12,4 +13,7 @@ __all__ = [
     "ModelOutput",
     "SparseMultiTaskGNN",
     "multitask_loss",
+    "DecodeConfig",
+    "DecodedEvent",
+    "decode_event",
 ]

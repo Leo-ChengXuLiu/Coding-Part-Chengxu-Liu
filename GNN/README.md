@@ -15,20 +15,27 @@ same composite-object candidate.
 2. Sparse edge-aware message-passing layers update every node from its neighbors.
 3. Mean and max event pooling are concatenated back onto each node embedding.
 4. Separate heads predict top-like nodes, charm-like nodes, and same-top edges.
+5. A seed-and-grow decoder merges up to three top-prong nodes into one reconstructed
+   top jet.
+6. The highest charm score among the remaining nodes defines the recoil charm jet.
+7. The reconstructed top, recoil charm, their pair observables, and GNN scores are
+   packed into flat features for an interpretable event-level BDT.
 
 ```mermaid
 flowchart LR
-    N[Node features] --> ENC[Node encoder]
-    E[Edge features and index] --> MP[Sparse message passing]
-    ENC --> MP
-    MP --> H[Node embeddings]
-    H --> CTX[Event mean and max context]
-    H --> EDGE[Same-top edge head]
-    E --> EDGE
-    H --> TOP[Top-node head]
-    CTX --> TOP
-    H --> CHARM[Charm-node head]
-    CTX --> CHARM
+    J[Slim-jet nodes and edges] --> GNN[Sparse multi-task GNN]
+    GNN --> T[Top-node scores]
+    GNN --> E[Same-top edge scores]
+    T --> MERGE[Seed and grow: merge up to 3 top nodes]
+    E --> MERGE
+    MERGE --> TOP[Reconstructed top jet: summed four-momentum]
+    GNN --> C[Charm-node scores]
+    MERGE --> MASK[Remove selected top nodes]
+    C --> MASK
+    MASK --> CHARM[Highest-scoring remaining recoil-c jet]
+    TOP --> PACK[Top, charm, tc observables and GNN scores]
+    CHARM --> PACK
+    PACK --> BDT[Event-level BDT signal score]
 ```
 
 ## Input contract
@@ -46,18 +53,28 @@ owned by the calling analysis.
 ## Usage
 
 ```python
-from GNN.src.sparse_multitask_gnn import GraphBatch, ModelConfig, SparseMultiTaskGNN
+from GNN.src import DecodeConfig, GraphBatch, ModelConfig, SparseMultiTaskGNN, decode_event
 
 batch = GraphBatch(node_features, edge_index, edge_features, batch_index)
 model = SparseMultiTaskGNN(
     ModelConfig(node_dim=34, edge_dim=6, hidden_dim=128, message_layers=4)
 )
 output = model(batch)
+decoded = decode_event(
+    output,
+    p4=node_four_momenta,  # [nodes, 4] ordered as E, px, py, pz
+    edge_index=edge_index,
+    config=DecodeConfig(max_top_nodes=3),
+)
 
-top_probability = output.top_logits.sigmoid()
-charm_probability = output.charm_logits.sigmoid()
-same_top_probability = output.same_top_logits.sigmoid()
+top_nodes = decoded.top_node_indices
+charm_node = decoded.charm_node_index
+event_bdt_features = decoded.bdt_features
 ```
 
-The model returns learned node embeddings as well as the three logits so downstream
-analyses can build an interpretable event-level classifier without modifying the GNN.
+The decoder deliberately does not use truth labels. It turns the GNN predictions into
+one reconstructed top candidate, one non-overlapping recoil-charm candidate, and a flat
+numeric feature dictionary suitable for XGBoost or another event-level BDT.
+
+Run the complete interface smoke test with `python GNN/smoke_test.py` from the
+repository root.
