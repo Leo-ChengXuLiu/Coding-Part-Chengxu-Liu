@@ -6,6 +6,11 @@ normalization, plotting, detector configuration, or cluster-specific code.
 
 ## Architecture
 
+The design separates object-level flavor evidence from event-level classification.
+Stage 2 keeps the raw reconstructed features while adding nonlinear role hypotheses
+from Stage 1, so the final model can correct imperfect taggers instead of treating
+their decisions as hard cuts.
+
 1. Three role-specific Stage-1 taggers are trained:
    `HJ -> b`, `LJ -> c`, and `LJ -> b`.
 2. Training-event Stage-1 scores are strictly out-of-fold (OOF). Validation and
@@ -17,6 +22,19 @@ normalization, plotting, detector configuration, or cluster-specific code.
    - three deterministic role-score combinations.
 4. Truth flavor is used only to supervise Stage 1 and is rejected from every
    model feature list.
+
+```mermaid
+flowchart LR
+    HJ[HJ features] --> HB[HJ to b tagger]
+    LJ[LJ features] --> LC[LJ to c tagger]
+    LJ --> LB[LJ to b tagger]
+    HB --> OOF[OOF role scores]
+    LC --> OOF
+    LB --> OOF
+    RAW[Event and raw HJ/LJ features] --> EVT[Hybrid Role-Complete event BDT]
+    OOF --> EVT
+    EVT --> P[Signal probability]
+```
 
 ## Expected tables
 
