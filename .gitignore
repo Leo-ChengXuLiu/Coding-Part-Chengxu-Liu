@@ -7,3 +7,5 @@ models/
 *.root
 *.hepmc*
 *.lhe*
+*.pt
+*.pth
