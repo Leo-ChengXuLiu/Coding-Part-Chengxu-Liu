@@ -1,14 +1,14 @@
 # Hybrid Role-Complete BDT
 
-这是 10 TeV `tc` 分析中使用的两层 XGBoost 核心代码，不包含事件数据、模型权重或服务器脚本。
+This repository contains the two-stage XGBoost training core used in the 10 TeV `tc` analysis. Event datasets, trained model weights, and cluster-specific scripts are not included.
 
-模型结构：
+## Architecture
 
-1. 第一层分别训练 `HJ -> b`、`LJ -> c`、`LJ -> b` 三个 tagger；训练事件使用严格 5-fold OOF 分数。
-2. 第二层 Hybrid Role-Complete 使用事件级重建量、HJ/LJ detector features，以及六个 OOF role-score 特征完成 signal/background 分类。
-3. validation 用于选择阈值，test 只用于最终 AUC、S/B/Z 评估；truth flavor 只作为第一层监督标签。
+1. Stage 1 trains three role-specific taggers: `HJ -> b`, `LJ -> c`, and `LJ -> b`. Training-event predictions are produced with strict five-fold out-of-fold evaluation.
+2. Stage 2 combines reconstructed event observables, detector-level HJ/LJ features, and six out-of-fold role-score features in the Hybrid Role-Complete classifier.
+3. The validation split selects the score threshold, while the test split is used only for the final AUC and S/B/Z evaluation. Truth flavor is used only as Stage-1 supervision.
 
-## 输入
+## Input layout
 
 ```text
 FEATURE_ROOT/
@@ -19,9 +19,9 @@ FEATURE_ROOT/
       feature_manifest.json
 ```
 
-字段顺序和禁止进入模型的字段由 `configs/BDT_FEATURES_DETECTOR.yaml` 固定。每个事件必须有唯一 `event_id`，每个事件应对应一个 `HJ` 和一个 `LJ` jet row。
+The ordered feature contract and forbidden model inputs are defined in `configs/BDT_FEATURES_DETECTOR.yaml`. Every event must have a unique `event_id` and one `HJ` plus one `LJ` row in the jet table.
 
-## 运行
+## Installation and training
 
 ```bash
 python -m venv .venv
@@ -37,6 +37,8 @@ python train_hybrid_role_complete.py \
   --mjj-min-gev 7000
 ```
 
-使用 CUDA 时将 `--device cpu` 改为 `--device cuda`。主要输出包括模型文件、`summary.json`、`model_comparison.csv` 和带固定 split 的事件分数。
+For CUDA training, replace `--device cpu` with `--device cuda`. Main outputs include trained models, `summary.json`, `model_comparison.csv`, and event scores with their frozen split assignments.
 
-注意：Detector V2 的 IP 特征属于参数化 tracking sensitivity benchmark；公开结果应同时报告 no-tracking/IP 消融。
+## Detector caveat
+
+The Detector V2 impact-parameter features form a parameterized tracking-sensitivity benchmark rather than a validated muon-collider detector-performance claim. Published results should therefore include the no-tracking/IP ablation.
